@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none"
+     stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"
+     role="img" aria-label="PRION">
+  <title>PRION</title>
+
+  <!-- The healthy fold: three-quarters of a ring -->
+  <path d="M47.3 44.9 A20 20 0 1 1 50.1 23.6" />
+
+  <!-- The misfold: the remaining quarter, broken into a sharp zigzag -->
+  <path d="M50.1 23.6 L43 29 L53 34 L43 39.5 L47.3 44.9" />
+
+  <!-- Propagation: three strokes radiating from the break -->
+  <g stroke-width="3">
+    <path d="M56 27.5 L61 24.5" />
+    <path d="M56.5 34 L62.5 34" />
+    <path d="M56 40.5 L61 43.5" />
+  </g>
+</svg>

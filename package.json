@@ -1,26 +1,39 @@
 {
-  "name": "hydradb",
+  "name": "prion",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seeds": "tsx scripts/1-seeds.ts",
+    "expand": "tsx scripts/2-expand.ts",
+    "fulltext": "tsx scripts/3-fulltext.ts",
+    "classify": "tsx scripts/4-classify.ts",
+    "ingest": "tsx scripts/5-ingest.ts",
+    "eval": "tsx scripts/6-eval.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
+    "@hydradb/sdk": "^2.1.2",
+    "lucide-react": "^1.31.0",
+    "motion": "^13.1.0",
     "next": "16.3.1",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.12",
     "typescript": "^5"
   },
   "packageManager": "pnpm@9.9.0"

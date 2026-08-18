@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# PRION
+data/cache/http/
+*.checkpoint
+.env.local
+.vercel
+CLAUDE.md
+AGENTS.md
+# .env* above would swallow the template judges need to see
+!.env.example
