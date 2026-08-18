@@ -49,3 +49,6 @@ CLAUDE.md
 AGENTS.md
 # .env* above would swallow the template judges need to see
 !.env.example
+
+# private production notes
+demo.md

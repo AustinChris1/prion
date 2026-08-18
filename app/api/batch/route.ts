@@ -4,8 +4,8 @@ import { traceContamination } from "@/lib/trace";
 // 60s is the Vercel Hobby ceiling — anything higher fails the build there.
 export const maxDuration = 60;
 
-// Sized to finish inside the 60s Hobby ceiling; raise both on Pro.
-const MAX_IDS = 16;
+// Per-request ceiling only; the client chunks so the full list is still checked.
+const MAX_IDS = 24;
 // Traces run concurrently, but politely — OpenAlex is a public good.
 const CONCURRENCY = 4;
 

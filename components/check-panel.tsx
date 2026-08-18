@@ -37,6 +37,9 @@ const EXAMPLES = [
   },
 ];
 
+// Requests are chunked at this size; the whole list is still checked.
+const CHUNK = 12;
+
 type Mode = "single" | "batch";
 
 type State =
@@ -59,6 +62,7 @@ export function CheckPanel() {
   const [value, setValue] = useState("");
   const [bib, setBib] = useState("");
   const [state, setState] = useState<State>({ status: "idle" });
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
 
   const loading = state.status === "loading";
   // Parsed live so the count updates as they paste.
@@ -89,24 +93,50 @@ export function CheckPanel() {
   async function traceMany() {
     const { ids } = parseReferences(bib);
     if (ids.length === 0) return;
+
     setState({ status: "loading" });
+    setProgress({ done: 0, total: ids.length });
+
+    // Chunked client-side so a long bibliography is not capped by the
+    // serverless time limit — each request stays well inside it.
+    const rows: BatchRow[] = [];
 
     try {
-      const res = await fetch("/api/batch", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ids }),
-      });
-      const data = await res.json();
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const res = await fetch("/api/batch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ids: ids.slice(i, i + CHUNK) }),
+        });
+        const data = await res.json();
 
-      if (!res.ok) {
-        setState({ status: "error", text: data.message ?? "Batch failed." });
-        return;
+        if (!res.ok) {
+          setState({ status: "error", text: data.message ?? "Batch failed." });
+          return;
+        }
+
+        rows.push(...data.rows);
+        setProgress({ done: Math.min(i + CHUNK, ids.length), total: ids.length });
       }
-      setState({ status: "batch", rows: data.rows, summary: data.summary });
     } catch {
       setState({ status: "error", text: "Could not reach the trace service." });
+      return;
     }
+
+    const resolved = rows.filter((r) => r.ok);
+    const flagged = resolved.filter((r) => (r.findings ?? 0) > 0);
+
+    setState({
+      status: "batch",
+      rows,
+      summary: {
+        submitted: ids.length,
+        resolved: resolved.length,
+        flagged: flagged.length,
+        clean: resolved.length - flagged.length,
+        truncatedInput: 0,
+      },
+    });
   }
 
   return (
@@ -248,9 +278,7 @@ export function CheckPanel() {
                         : "")
                     : "IEEE, APA, BibTeX, or bare DOIs — all fine"}
                 </p>
-                {parsed.found > 16 && (
-                  <p className="label text-amber">first 16 only</p>
-                )}
+
               </div>
 
               <button
@@ -263,9 +291,11 @@ export function CheckPanel() {
                 ) : (
                   <FileStack size={14} />
                 )}
-                {parsed.found > 0
-                  ? `Check ${Math.min(parsed.found, 16)} references`
-                  : "Check all references"}
+                {loading && progress.total > 0
+                  ? `Checking ${progress.done} of ${progress.total}…`
+                  : parsed.found > 0
+                    ? `Check ${parsed.found} reference${parsed.found === 1 ? "" : "s"}`
+                    : "Check all references"}
               </button>
               <p className="label mt-3 text-center text-mist/50">
                 DOIs and arXiv IDs are extracted automatically · a few seconds each
@@ -458,6 +488,10 @@ function Metric({ value, label }: { value: number; label: string }) {
 function BatchView({ rows, summary }: { rows: BatchRow[]; summary: Summary }) {
   const anyFlagged = summary.flagged > 0;
 
+  const flagged = rows.filter((r) => r.ok && (r.findings ?? 0) > 0);
+  const clean = rows.filter((r) => r.ok && (r.findings ?? 0) === 0);
+  const unresolved = rows.filter((r) => !r.ok);
+
   return (
     <Panel tone={anyFlagged ? "toxic" : "clean"}>
       <div className="flex items-start gap-3">
@@ -466,45 +500,77 @@ function BatchView({ rows, summary }: { rows: BatchRow[]; summary: Summary }) {
         ) : (
           <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
         )}
-        <p className="label">
-          {summary.flagged} flagged · {summary.clean} clean ·{" "}
-          {summary.submitted - summary.resolved} unresolved
-        </p>
+        <div className="min-w-0 flex-1">
+          <p className="label">
+            {anyFlagged
+              ? `${summary.flagged} of ${summary.submitted} references need a look`
+              : `All ${summary.resolved} resolved references are clean`}
+          </p>
+        </div>
       </div>
 
-      <ul className="mt-6 divide-y divide-current/15 border-t border-current/20">
-        {rows.map((row, i) => (
-          <li key={i} className="flex items-start gap-3 py-3">
-            <span
-              className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
-                !row.ok
-                  ? "bg-mist"
-                  : (row.findings ?? 0) > 0
-                    ? "bg-toxic"
-                    : "bg-clean"
-              }`}
-            />
-            <div className="min-w-0 flex-1">
-              <p className="lit truncate text-sm text-chalk">
-                {row.title ?? row.input}
-              </p>
-              <p className="label mt-1 opacity-70">
-                {!row.ok
-                  ? (row.error ?? "Not resolved")
-                  : (row.findings ?? 0) > 0
-                    ? `${row.findings} retracted upstream · nearest ${row.nearestHops} hop${row.nearestHops === 1 ? "" : "s"}`
-                    : `Clean · ${row.directReferences} refs checked`}
-              </p>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <div className="mt-6 grid grid-cols-3 gap-4 border-t border-current/20 pt-5">
+        <Metric value={summary.flagged} label="Flagged" />
+        <Metric value={summary.clean} label="Clean" />
+        <Metric value={summary.submitted - summary.resolved} label="Unresolved" />
+      </div>
 
-      {summary.truncatedInput > 0 && (
-        <p className="mt-5 border-t border-current/20 pt-4 font-mono text-[0.7rem] opacity-70">
-          {summary.truncatedInput} further entries were not checked — 20 per run.
+      {flagged.length > 0 && (
+        <BatchGroup title="Needs a look" rows={flagged} />
+      )}
+      {clean.length > 0 && <BatchGroup title="Verified clean" rows={clean} />}
+      {unresolved.length > 0 && (
+        <BatchGroup title="Not in OpenAlex" rows={unresolved} />
+      )}
+
+      {unresolved.length > 0 && (
+        <p className="mt-6 border-t border-current/20 pt-4 font-mono text-[0.7rem] leading-relaxed opacity-70">
+          Unresolved entries are not errors. OpenAlex indexes recent papers and
+          preprints with a lag, and datasheets or web pages have no DOI at all.
         </p>
       )}
     </Panel>
+  );
+}
+
+function BatchGroup({ title, rows }: { title: string; rows: BatchRow[] }) {
+  return (
+    <div className="mt-7">
+      <p className="label mb-3 opacity-70">
+        {title} · {rows.length}
+      </p>
+
+      <ul className="divide-y divide-current/15 border-t border-current/20">
+        {rows.map((row, i) => {
+          const flagged = row.ok && (row.findings ?? 0) > 0;
+
+          return (
+            <li key={i} className="flex items-start gap-3 py-4">
+              <span
+                className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${
+                  !row.ok
+                    ? "bg-current opacity-30"
+                    : flagged
+                      ? "bg-current"
+                      : "bg-current opacity-60"
+                }`}
+              />
+              <div className="min-w-0 flex-1">
+                <PaperLink
+                  work={{ title: row.title ?? row.input, doi: row.ok ? row.input : null }}
+                />
+                <p className="label mt-1.5 opacity-70">
+                  {!row.ok
+                    ? "Not indexed"
+                    : flagged
+                      ? `${row.findings} retracted upstream · nearest ${row.nearestHops} hop${row.nearestHops === 1 ? "" : "s"}`
+                      : `${row.directReferences} references checked`}
+                </p>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

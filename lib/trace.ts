@@ -143,7 +143,16 @@ export async function traceContamination(rawId: string): Promise<TraceResult> {
   if (!id) throw new Error("Not a recognisable DOI, PMID, or OpenAlex ID.");
 
   const target = await fetchOne(id);
-  if (!target) throw new Error(`No work found for ${rawId}.`);
+
+  if (!target) {
+    // Resolvable at doi.org but absent here means OpenAlex has not indexed it
+    // yet, which is common for preprints in their first weeks.
+    throw new Error(
+      `${rawId} is not in OpenAlex, which is the index PRION traces. ` +
+        `Very recent papers and preprints often take weeks to appear. ` +
+        `The identifier may still be perfectly valid.`,
+    );
+  }
 
   let requests = 1;
 
